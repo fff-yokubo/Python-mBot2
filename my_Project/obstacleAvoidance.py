@@ -43,13 +43,13 @@ class US_ObstacleSensor():
     POS_Y = 50
 
 
-    def __init__(self):
+    def __init__(self, THRESHOLD = 10):
 
         #上下限値: 下記の値を逸脱した場合は異常値とみなす
         self.UB = 100#
         self.LB = 4
         self.alpha = 0.9 # IIRフィルタの係数
-        self.THRESHOLD = 10 #障害物の検知距離(cm)
+        self.THRESHOLD = THRESHOLD #障害物の検知距離(cm)
 
 
         #センサ値の初期値
@@ -60,6 +60,10 @@ class US_ObstacleSensor():
         # cyberpi.display.show_label(text,size,x,y,index)
 
         cyberpi.display.show_label(self.range, 12, 50, self.POS_Y, index = 1)
+
+
+        for _ in range(200):
+            self.getRange()
 
 
 
@@ -110,52 +114,72 @@ def mbot2_go(Base, Diff, left=True):
         mbot2.EM_set_speed(-1 * ((Base + Diff)),"EM2")
 
 
-def obstacle_avoidance():
+def obstacle_avoidance(uos):
     '''
     障害物回避行動のメイン関数
 
     コの字に避ける
 
+      ↓
+    ┌-┘
+    |
+    └-┐
+
+
     '''
     POS_Y = 20
 
     dist_x = 20
-    dist_y = 20
+    dist_y = 25
 
     #障害物検知(発動)
 
     cyberpi.display.show_label("Obstacle Avoidance", 12, 0, POS_Y, index = 2)
     time.sleep(1)
 
+    #Step1
+    #┌-┘
+
+
+
     #90度左に回転
+    #
     cyberpi.display.show_label("Turn Left 90",12,0,POS_Y + 10,3)
     mbot2.turn(-90)
     time.sleep(1)
 
-    #dist_x cm 直進
+    #横方向にdist_x cm
     mbot2.straight(dist_x)
     cyberpi.display.show_label("Avoid %s cm"%dist_x,12,0,POS_Y + 10,3)
     time.sleep(1)
 
-    #90度右に回転
+    #90度右に回転(元の進行方向に戻す)
     cyberpi.display.show_label("Turn Right 90",12,0,POS_Y + 10,3)
     mbot2.turn(90)
     time.sleep(1)
 
-    #dist_y cm 直進
+
+    #進行方向に対し、dist_y cm 直進
     mbot2.straight(dist_y)
     cyberpi.display.show_label("Avoid %s cm"%dist_y,12,0,POS_Y + 10,3)
     time.sleep(1)
 
-    #90度右に回転
-    cyberpi.display.show_label("Turn Right 90",12,0,POS_Y + 10,3)
-    mbot2.turn(90)
-    time.sleep(1)
+
+
+    #障害物をよけきれたかどうか判定する
+
+    while inavoidance_chk(uos):
+        mbot2.straight(dist_y)
+        time.sleep(1)
+
 
     #dist_x cm 直進
     mbot2.straight(dist_x)
     cyberpi.display.show_label("Avoid %s cm"%dist_x,12,0,POS_Y + 10,3)
     time.sleep(1)
+
+
+
 
     #90度左に回転
     cyberpi.display.show_label("Turn Left 90",12,0,POS_Y + 10,3)
@@ -163,11 +187,29 @@ def obstacle_avoidance():
     time.sleep(1)
 
 
+def inavoidance_chk(uos):
+    '''
+    回避中チェック
+    90度回転して障害物の有無を確認
+        障害物あり → -90度回転(もとの向きに戻して)　True
+        障害物なし → False
+    を返す
+    '''
+
+    mbot2.turn(90)
+
+    if uos.getRange() < 15:
+        mbot2.turn(-90)
+        return True
+    else:
+        return False
 
 
 uos = US_ObstacleSensor()
 
-obstacle_avoidance()
+
+
+obstacle_avoidance(uos)
 
 # while True:
 
