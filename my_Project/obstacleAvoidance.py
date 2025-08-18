@@ -1,28 +1,182 @@
+'''
 
-import mbuild
-import mbot2
-import event
-import time
-import cyberpi
+コードの説明
+このプログラムは CyberPi と mBuild の超音波センサー を使って、センサーの測定距離を画面に表示し、さらに距離によって LED の色と警告表示を切り替えるものです。
 
-import random
+処理の流れ
 
-# ボタンAが押された際に実行するFunction
+初期表示
+    CyberPi の画面に "Range:" というラベルを表示します。
 
-@event.is_press('a')
-def on_button_a_pressed():
+メインループ（無限ループ）
+    mbuild.ultrasonic2.get(index=1) を使って、超音波センサーで前方までの距離（cm）を取得します。
+    取得した距離を CyberPi の画面に数値として表示します。
 
-    while True:
+障害物の判定
+    距離が 10cm 未満の場合：
+    LED を 赤色 に点灯させます。
+    画面に "Obstacle!" と表示して、障害物が近いことを知らせます。
 
-        #障害物との距離が10cm以下であることを確認する
+    距離が 10cm 以上の場合：
 
-        if mbuild.ultrasonic2.get(1) < 10:
-            #障害物が見つかった場合は、左右いずれかランダムに90どに開店する
-            mbot2.turn(-90)
+        LED を 緑色 に点灯させます。
 
-            mbot2.turn(random.choice([-90,90]))
+        画面に "No Obstacle" と表示して、障害物がないことを示します。
+
+'''
+
+import math
+
+
+import mbuild, mbot2, cyberpi, event, mbuild, time
+
+
+
+class US_ObstacleSensor():
+
+    '''
+    超音波センサーを使って障害物を検知するクラス
+        IIRフィルタを使用してセンサ値のノイズを除去
+        センサ値が一定の範囲内にあるかを判定する
+    '''
+
+    POS_Y = 50
+
+
+    def __init__(self):
+
+        #上下限値: 下記の値を逸脱した場合は異常値とみなす
+        self.UB = 100#
+        self.LB = 4
+        self.alpha = 0.9 # IIRフィルタの係数
+        self.THRESHOLD = 10 #障害物の検知距離(cm)
+
+
+        #センサ値の初期値
+
+        self.range = (self.UB+self.LB)/2
+        cyberpi.display.show_label("Range:", 12, 0, self.POS_Y, index = 0)
+
+        # cyberpi.display.show_label(text,size,x,y,index)
+
+        cyberpi.display.show_label(self.range, 12, 50, self.POS_Y, index = 1)
+
+
+
+    def getRange(self):
+        """
+        センサ値を取得する関数
+        IIRフィルタを使用してノイズを除去
+        """
+        # 測定値を取得
+        rangeval = mbuild.ultrasonic2.get(index=1)
+
+        #測定値下限以下→下限値を代入
+        rangeval = max(self.LB, rangeval)
+
+        #測定値が上限超→上限値を代入
+
+        rangeval = min(self.UB, rangeval)
+
+        # IIRフィルタを適用
+        self.range = (self.range * (1 - self.alpha)) + (rangeval * self.alpha)
+        self.range = round(self.range,0)
+        cyberpi.display.show_label("%.0f"%self.range, 12, 50, self.POS_Y, index=1)
+
+        return self.range
+
+
+
+    def chk_obstacle(self):
+        """
+        障害物を検知する関数
+        センサ値が10cm未満の場合は障害物ありと判定
+        """
+        range = self.getRange()
+        if range < self.THRESHOLD:
+            return True
         else:
-            mbot2.forward(10)
+            return False
 
-        time.sleep(0.1)
+'''
+'''
+
+def mbot2_go(Base, Diff, left=True):
+    if left:
+        mbot2.EM_set_speed((Base + Diff),"EM1")
+        mbot2.EM_set_speed((Base - Diff),"EM2")
+    else:
+        mbot2.EM_set_speed(-1 * ((Base - Diff)),"EM1")
+        mbot2.EM_set_speed(-1 * ((Base + Diff)),"EM2")
+
+
+def obstacle_avoidance():
+    '''
+    障害物回避行動のメイン関数
+
+    コの字に避ける
+
+    '''
+    POS_Y = 20
+
+    dist_x = 20
+    dist_y = 20
+
+    #障害物検知(発動)
+
+    cyberpi.display.show_label("Obstacle Avoidance", 12, 0, POS_Y, index = 2)
+    time.sleep(1)
+
+    #90度左に回転
+    cyberpi.display.show_label("Turn Left 90",12,0,POS_Y + 10,3)
+    mbot2.turn(-90)
+    time.sleep(1)
+
+    #dist_x cm 直進
+    mbot2.straight(dist_x)
+    cyberpi.display.show_label("Avoid %s cm"%dist_x,12,0,POS_Y + 10,3)
+    time.sleep(1)
+
+    #90度右に回転
+    cyberpi.display.show_label("Turn Right 90",12,0,POS_Y + 10,3)
+    mbot2.turn(90)
+    time.sleep(1)
+
+    #dist_y cm 直進
+    mbot2.straight(dist_y)
+    cyberpi.display.show_label("Avoid %s cm"%dist_y,12,0,POS_Y + 10,3)
+    time.sleep(1)
+
+    #90度右に回転
+    cyberpi.display.show_label("Turn Right 90",12,0,POS_Y + 10,3)
+    mbot2.turn(90)
+    time.sleep(1)
+
+    #dist_x cm 直進
+    mbot2.straight(dist_x)
+    cyberpi.display.show_label("Avoid %s cm"%dist_x,12,0,POS_Y + 10,3)
+    time.sleep(1)
+
+    #90度左に回転
+    cyberpi.display.show_label("Turn Left 90",12,0,POS_Y + 10,3)
+    mbot2.turn(-90)
+    time.sleep(1)
+
+
+
+
+uos = US_ObstacleSensor()
+
+obstacle_avoidance()
+
+# while True:
+
+
+#     if uos.chk_obstacle():
+#         cyberpi.led.on(255,0,0,id="all")
+#         cyberpi.display.show_label("Obstacle!", 16, 0, 20, index = 2)
+#     else:
+#         cyberpi.led.on(0,255,0,id="all")
+#         cyberpi.display.show_label("No Obstacle", 16, 0, 20, index = 2)
+
 
